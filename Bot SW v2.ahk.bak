@@ -1,0 +1,121 @@
+﻿#SingleInstance, Force
+#NoEnv
+SetBatchLines, -1
+
+#include gdip.ahk  ; download form http://www.autohotkey.com/forum/topic32238.html 
+
+file=e:\1.png  ;image of "needle" to search for
+file2=e:\2.png ;image that contains the needle image just for testing
+
+
+If !pToken := Gdip_Startup()
+{
+	MsgBox, 48, gdiplus error!, Gdiplus failed to start. Please ensure you have gdiplus on your system
+	ExitApp
+}
+
+Gui, 1:+hwndhwnd  ; just to create a window that contains the needle somewhere for testing
+Gui, 1:add,picture,,%file2%
+Gui ,show ,x200 y200 
+return
+
+
+
+F4:: 
+pBitmaphaystack:=Gdip_BitmapFromHWND(hwnd)
+pBitmapneedle:=Gdip_CreateBitmapFromFile(file)
+Gdip_ImageSearch(pBitmapNeedle, pBitmapHayStack,  x,  y)
+
+msgbox %x%  %y%
+
+Gdip_DisposeImage(pBitmaphaystack)
+Gdip_DisposeImage(pBitmapneedle)
+Gdip_Shutdown(pToken)
+ExitApp
+
+
+
+/* Gdip_ImageSearch()
+   
+   gdi+ image search in machine code (thanks tic)
+   http://www.autohotkey.com/forum/post-380278.html#380278
+   
+   Parameters
+      pBitmapNeedle    gdi+ bitmap to search for
+      pBitmapHayStack  gdi+ bitmap to search in
+      x                x coordinate where pBitmapNeedle was found
+      y                y coordinate where pBitmapNeedle was found
+   
+   Returns
+      True if image was found, false otherwise.
+*/
+Gdip_ImageSearch(pBitmapNeedle, pBitmapHayStack, byref x, byref y) {
+
+   Width1 := Gdip_GetImageWidth(pBitmapHayStack), Height1 := Gdip_GetImageHeight(pBitmapHayStack)
+   Width2 := Gdip_GetImageWidth(pBitmapNeedle), Height2 := Gdip_GetImageHeight(pBitmapNeedle)
+   E1 := Gdip_LockBits(pBitmapHayStack, 0, 0, Width1, Height1, Stride1, Scan01, BitmapData01)
+   E2 := Gdip_LockBits(pBitmapNeedle, 0, 0, Width2, Height2, Stride2, Scan02, BitmapData02)
+   ;NB: Gdip_LockBits changed slightly and required another parameter for latest gdip library.
+
+   MCode(Gdip_ImageSearch, "83EC148B4424309983E20303C28BC88B442434995383E2035503C2C1F80256C1F902837C24"
+   . "30005789442420C7442410000000000F8EBE0000008B5C24288B7C24388D048D00000000894424188B442430895C241CE"
+   . "B098DA424000000008BFFC74424440000000085C07E6D895C24148B6C242CC7442440000000008D6424008B4C24403B4C"
+   . "243C0F8D8600000033C985FF7E158BD58BF38B063B02751F4183C20483C6043BCF7CEF8B442420035C2418FF44244003C"
+   . "003C003E8EBC38B4C24448B5C24148B4424304183C3043BC8894C2444895C24147C978B4C24108B5C241C035C2418413B"
+   . "4C2434894C2410895C241C0F8C68FFFFFF8B5424488B44244C5F5E5DC702FFFFFFFFC700FFFFFFFF5B83C414C38B4C244"
+   . "48B5424488B44244C5F495E890A8B4C24085D89085B83C414C3")
+   /* Machine code
+   void Gdip_ImageSearch(unsigned int * HayStack, unsigned int * Needle, int w1, int h1, int w2, int h2, int Stride1, int Stride2, int * x, int * y)
+   {
+      int tx, ty;
+      int offset1 = Stride1/4, offset2 = Stride2/4;
+      for (int y1 = 0; y1 < h1; ++y1)
+      {
+        for (int x1 = 0; x1 < w1; ++x1)
+        {
+          ty = y1;
+          for (int y2 = 0; y2 < h2; ++y2)
+          {
+            tx = x1;
+            for (int x2 = 0; x2 < w2; ++x2)
+            {
+            if (HayStack[tx+(ty*offset1)] != Needle[x2+(y2*offset2)])
+               goto NoMatch;
+            tx++;
+            }
+            ty++;
+          }
+          x[0] = x1-1; y[0] = y1;
+          return;
+          NoMatch:
+            continue;
+        }
+      }
+      x[0] = -1; y[0] = -1;
+      return;
+   }         
+   */
+   VarSetCapacity(x, 8, 0), VarSetCapacity(y, 8, 0)
+   DllCall(&Gdip_ImageSearch, "uint", Scan01, "uint", Scan02, "int", Width1, "int", Height1, "int", Width2, "int", Height2, "int", Stride1, "int", Stride2, "int*", x, "int*", y)
+
+   Gdip_UnlockBits(pBitmapHayStack, BitmapData01), Gdip_UnlockBits(pBitmapNeedle, BitmapData02)
+   
+   ;if found...
+   if (x || y) {
+      ;There is a bug in the machine code where it returns x-1 rather than x, so correct it here.
+      x += 1
+      return true
+	  MsgBox, aaaaa
+   } else
+      return false
+	  MsgBox, bbbbbb
+}
+
+
+
+MCode(ByRef code, hex)
+{
+   VarSetCapacity(code, StrLen(hex)//2)
+   Loop % StrLen(hex)//2      ;%
+      NumPut("0x" SubStr(hex, 2*A_Index-1, 2), code, A_Index-1, "char")
+}
